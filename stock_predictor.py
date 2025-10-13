@@ -57,10 +57,25 @@ newsapi = NewsApiClient(api_key=NEWS_API_KEY)
 
 @st.cache_data(ttl=3600)
 def fetch_stock_data(symbol, days):
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
-    df = yf.download(symbol, start=start_date, end=end_date)
-    return df
+    try:
+        import requests
+        session = requests.Session()
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        })
+        
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        df = yf.download(symbol, start=start_date, end=end_date, session=session, progress=False)
+        
+        if df.empty:
+            st.error(f"No data retrieved for {symbol}. Please check the stock symbol.")
+            return None
+            
+        return df
+    except Exception as e:
+        st.error(f"Error fetching stock data: {str(e)}")
+        return None
 
 @st.cache_data(ttl=3600)
 def get_news_headlines(symbol):
@@ -81,7 +96,14 @@ def get_news_headlines(symbol):
 def get_current_price(symbol):
     """Fetch the current live price of a stock"""
     try:
-        ticker = yf.Ticker(symbol)
+        # Create ticker with updated session to avoid chrome impersonation errors
+        import requests
+        session = requests.Session()
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        })
+        
+        ticker = yf.Ticker(symbol, session=session)
         todays_data = ticker.history(period='1d')
         
         if todays_data.empty:
@@ -90,11 +112,17 @@ def get_current_price(symbol):
         # If market is open, we can get the current price
         if 'Open' in todays_data.columns and len(todays_data) > 0:
             # For market hours, use current price if available
-            if 'regularMarketPrice' in ticker.info:
-                current_price = ticker.info['regularMarketPrice']
-                is_live = True
-            else:
-                # Fallback to the most recent close
+            try:
+                info = ticker.info
+                if 'regularMarketPrice' in info and info['regularMarketPrice']:
+                    current_price = info['regularMarketPrice']
+                    is_live = True
+                else:
+                    # Fallback to the most recent close
+                    current_price = float(todays_data['Close'].iloc[-1])
+                    is_live = False
+            except:
+                # If ticker.info fails, use the most recent close
                 current_price = float(todays_data['Close'].iloc[-1])
                 is_live = False
             
@@ -243,6 +271,11 @@ def analyze_sentiment(text):
 @st.cache_data(ttl=3600)
 def forecast_with_prophet(df, forecast_days=30):
     try:
+        # Check if dataframe is valid
+        if df is None or len(df) == 0:
+            st.error("No data available for Prophet forecasting.")
+            return None
+            
         # Check if we have enough data points
         if len(df) < 30:
             st.warning("Not enough historical data for reliable forecasting (< 30 data points)")
@@ -500,8 +533,25 @@ def forecast_with_prophet(df, forecast_days=30):
 def simple_forecast_fallback(df, forecast_days=30):
     """A simple linear regression forecast as fallback when Prophet fails"""
     try:
+        # Check if dataframe is empty or None
+        if df is None or len(df) == 0:
+            st.error("No data available for forecasting.")
+            return None
+            
         # Get the closing prices as a simple 1D array
+        if 'Close' not in df.columns:
+            st.error("Close price column not found in data.")
+            return None
+            
         close_prices = df['Close'].values.flatten()
+        
+        # Remove NaN values
+        close_prices = close_prices[~np.isnan(close_prices)]
+        
+        # Check if we have enough data after cleaning
+        if len(close_prices) < 2:
+            st.error("Insufficient data points for forecasting (need at least 2 valid data points).")
+            return None
         
         # Create a sequence for x values (0, 1, 2, ...)
         x = np.arange(len(close_prices)).reshape(-1, 1)
@@ -616,27 +666,57 @@ class MultiAlgorithmStockPredictor:
 
     # Technical indicators calculation methods remain the same
     def calculate_technical_indicators(self, df):
-        # Original technical indicators remain the same
-        df['MA5'] = df['Close'].rolling(window=5).mean()
-        df['MA20'] = df['Close'].rolling(window=20).mean()
-        df['MA50'] = df['Close'].rolling(window=50).mean()
-        df['MA200'] = df['Close'].rolling(window=200).mean()
-        df['RSI'] = self.calculate_rsi(df['Close'])
-        df['MACD'] = self.calculate_macd(df['Close'])
-        df['ROC'] = df['Close'].pct_change(periods=10) * 100
-        df['ATR'] = self.calculate_atr(df)
-        df['BB_upper'], df['BB_lower'] = self.calculate_bollinger_bands(df['Close'])
-        df['Volume_MA'] = df['Volume'].rolling(window=20).mean()
-        df['Volume_Rate'] = df['Volume'] / df['Volume'].rolling(window=20).mean()
+        # Check if we have enough data
+        if len(df) < 50:
+            st.warning("Limited data available. Using simplified indicators.")
+            # Use simplified indicators for small datasets
+            df['MA5'] = df['Close'].rolling(window=5, min_periods=1).mean()
+            df['MA20'] = df['Close'].rolling(window=min(20, len(df)), min_periods=1).mean()
+            df['RSI'] = self.calculate_rsi(df['Close'])
+            df['MACD'] = self.calculate_macd(df['Close'])
+            df['ROC'] = df['Close'].pct_change(periods=min(10, len(df)-1)) * 100
+            
+            # Fill remaining columns with simple values to avoid errors
+            df['MA50'] = df['MA20']
+            df['MA200'] = df['MA20']
+            df['ATR'] = (df['High'] - df['Low']).rolling(window=5, min_periods=1).mean()
+            df['BB_upper'] = df['Close'] * 1.02
+            df['BB_lower'] = df['Close'] * 0.98
+            df['Volume_MA'] = df['Volume'].rolling(window=min(20, len(df)), min_periods=1).mean()
+            df['Volume_Rate'] = df['Volume'] / df['Volume_MA']
+            df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
+            df['EMA26'] = df['Close'].ewm(span=26, adjust=False).mean()
+            df['MOM'] = df['Close'].diff(min(10, len(df)-1))
+            df['STOCH_K'] = 50  # Neutral value
+            df['WILLR'] = -50   # Neutral value
+        else:
+            # Original technical indicators for larger datasets
+            df['MA5'] = df['Close'].rolling(window=5, min_periods=1).mean()
+            df['MA20'] = df['Close'].rolling(window=20, min_periods=1).mean()
+            df['MA50'] = df['Close'].rolling(window=50, min_periods=1).mean()
+            df['MA200'] = df['Close'].rolling(window=200, min_periods=1).mean()
+            df['RSI'] = self.calculate_rsi(df['Close'])
+            df['MACD'] = self.calculate_macd(df['Close'])
+            df['ROC'] = df['Close'].pct_change(periods=10) * 100
+            df['ATR'] = self.calculate_atr(df)
+            df['BB_upper'], df['BB_lower'] = self.calculate_bollinger_bands(df['Close'])
+            df['Volume_MA'] = df['Volume'].rolling(window=20, min_periods=1).mean()
+            df['Volume_Rate'] = df['Volume'] / df['Volume_MA']
+            
+            # Additional technical indicators
+            df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
+            df['EMA26'] = df['Close'].ewm(span=26, adjust=False).mean()
+            df['MOM'] = df['Close'].diff(10)
+            df['STOCH_K'] = self.calculate_stochastic(df)
+            df['WILLR'] = self.calculate_williams_r(df)
         
-        # Additional technical indicators
-        df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
-        df['EMA26'] = df['Close'].ewm(span=26, adjust=False).mean()
-        df['MOM'] = df['Close'].diff(10)
-        df['STOCH_K'] = self.calculate_stochastic(df)
-        df['WILLR'] = self.calculate_williams_r(df)
+        # Fill NaN with forward fill then backward fill, instead of dropping all NaN rows
+        df = df.fillna(method='ffill').fillna(method='bfill')
         
-        return df.dropna()
+        # Only drop rows if ALL values are NaN (which shouldn't happen after filling)
+        df = df.dropna(how='all')
+        
+        return df
     
     
     @staticmethod
@@ -844,9 +924,16 @@ class MultiAlgorithmStockPredictor:
                 df = df.fillna(method='ffill').fillna(method='bfill')
                 
             # Verify we have enough valid data after cleaning
-            if len(df.dropna()) < sequence_length:
-                st.error("Insufficient valid data after calculating indicators.")
+            # Use a more lenient check - need at least some data, not all rows perfect
+            valid_rows = len(df.dropna(subset=['Close']))
+            if valid_rows < max(10, sequence_length // 2):
+                st.error(f"Insufficient valid data after calculating indicators. Only {valid_rows} valid rows available.")
                 return None
+            
+            # If we don't have enough data for the full sequence length, reduce it
+            if valid_rows < sequence_length:
+                st.warning(f"Reducing sequence length from {sequence_length} to {valid_rows} due to limited data.")
+                sequence_length = max(10, valid_rows - 5)
                 
             # Enhanced data preparation with more features
             X_lstm, X_other, y, feature_names = self.prepare_data(df, sequence_length)
