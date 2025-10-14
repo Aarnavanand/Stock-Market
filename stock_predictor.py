@@ -2107,6 +2107,6 @@ except Exception as e:
     st.write("Detailed error information:", str(e))
 st.markdown("---")  
 st.markdown(
-    "🔗 [GitHub](https://github.com/sankeer28/stock-predictor)",
+    "🔗 [GitHub](https://github.com/Aarnavanand/Stock-Market)",
     unsafe_allow_html=True
 )
