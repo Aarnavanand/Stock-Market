@@ -1045,8 +1045,6 @@ class MultiAlgorithmStockPredictor:
                                   callbacks=[early_stopping], verbose=0)
                     lstm_pred = lstm_model.predict(X_lstm_test[-1:], verbose=0)[0][0]
                     predictions['LSTM'] = lstm_pred
-            else:
-                st.info("LSTM model skipped (TensorFlow not available)")
 
             # Train and predict with SVR
             svr_model = SVR(kernel='rbf', C=100, epsilon=0.1)
