@@ -708,8 +708,9 @@ class MultiAlgorithmStockPredictor:
             df['BB_upper'] = df['Close'] * 1.02
             df['BB_lower'] = df['Close'] * 0.98
             df['Volume_MA'] = df['Volume'].rolling(window=min(20, len(df)), min_periods=1).mean()
-            # Safe division to avoid NaN and division by zero
-            df['Volume_Rate'] = (df['Volume'] / df['Volume_MA'].replace(0, np.nan)).fillna(1.0)
+            # Safe division to avoid NaN and division by zero - ensure Series result
+            volume_rate = df['Volume'].values / df['Volume_MA'].replace(0, np.nan).values
+            df['Volume_Rate'] = pd.Series(volume_rate, index=df.index).fillna(1.0)
             df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
             df['EMA26'] = df['Close'].ewm(span=26, adjust=False).mean()
             df['MOM'] = df['Close'].diff(min(10, len(df)-1))
@@ -727,8 +728,9 @@ class MultiAlgorithmStockPredictor:
             df['ATR'] = self.calculate_atr(df)
             df['BB_upper'], df['BB_lower'] = self.calculate_bollinger_bands(df['Close'])
             df['Volume_MA'] = df['Volume'].rolling(window=20, min_periods=1).mean()
-            # Safe division to avoid NaN and division by zero
-            df['Volume_Rate'] = (df['Volume'] / df['Volume_MA'].replace(0, np.nan)).fillna(1.0)
+            # Safe division to avoid NaN and division by zero - ensure Series result
+            volume_rate = df['Volume'].values / df['Volume_MA'].replace(0, np.nan).values
+            df['Volume_Rate'] = pd.Series(volume_rate, index=df.index).fillna(1.0)
             
             # Additional technical indicators
             df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
