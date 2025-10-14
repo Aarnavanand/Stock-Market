@@ -10,10 +10,19 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from xgboost import XGBRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from statsmodels.tsa.arima.model import ARIMA
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout, Bidirectional
-from tensorflow.keras.callbacks import EarlyStopping
+
+# Optional TensorFlow import - will work without it
+HAS_TENSORFLOW = False
+try:
+    import tensorflow as tf
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import LSTM, Dense, Dropout, Bidirectional
+    from tensorflow.keras.callbacks import EarlyStopping
+    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+    HAS_TENSORFLOW = True
+except ImportError:
+    st.warning("⚠️ TensorFlow not available. LSTM model will be disabled. Other models will work fine.", icon="⚠️")
+
 from newsapi import NewsApiClient
 import yfinance as yf
 from prophet import Prophet
@@ -24,8 +33,6 @@ from textblob import TextBlob
 import nltk
 from nltk.sentiment import SentimentIntensityAnalyzer
 import re
-
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 # Download required NLTK data 
 try:
@@ -874,6 +881,10 @@ class MultiAlgorithmStockPredictor:
             return pd.Series(0, index=df.index)
 
     def build_lstm_model(self, input_shape):
+        """Build LSTM model - only if TensorFlow is available"""
+        if not HAS_TENSORFLOW:
+            return None
+            
         # Simplified LSTM architecture for faster training
         model = Sequential([
             LSTM(64, return_sequences=True, input_shape=input_shape),
@@ -965,14 +976,18 @@ class MultiAlgorithmStockPredictor:
 
             predictions = {}
             
-            # Train and predict with LSTM (with reduced epochs)
-            lstm_model = self.build_lstm_model((sequence_length, X_lstm.shape[2]))
-            early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
-            lstm_model.fit(X_lstm_train, y_train, epochs=20, batch_size=32,  # Reduced from 50 to 20 epochs
-                          validation_data=(X_lstm_test, y_test),
-                          callbacks=[early_stopping], verbose=0)
-            lstm_pred = lstm_model.predict(X_lstm_test[-1:], verbose=0)[0][0]
-            predictions['LSTM'] = lstm_pred
+            # Train and predict with LSTM (with reduced epochs) - only if TensorFlow is available
+            if HAS_TENSORFLOW:
+                lstm_model = self.build_lstm_model((sequence_length, X_lstm.shape[2]))
+                if lstm_model is not None:
+                    early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+                    lstm_model.fit(X_lstm_train, y_train, epochs=20, batch_size=32,  # Reduced from 50 to 20 epochs
+                                  validation_data=(X_lstm_test, y_test),
+                                  callbacks=[early_stopping], verbose=0)
+                    lstm_pred = lstm_model.predict(X_lstm_test[-1:], verbose=0)[0][0]
+                    predictions['LSTM'] = lstm_pred
+            else:
+                st.info("LSTM model skipped (TensorFlow not available)")
 
             # Train and predict with SVR
             svr_model = SVR(kernel='rbf', C=100, epsilon=0.1)

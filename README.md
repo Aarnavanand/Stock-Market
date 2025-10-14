@@ -1,17 +1,37 @@
 # Multi-Algorithm Stock Predictor
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-url.streamlit.app)
+
 ## 🚀 Overview
-The Multi-Algorithm Stock Predictor is an advanced stock price prediction system that leverages multiple machine learning algorithms and technical indicators to generate ensemble predictions for stock market movements. Built with Streamlit, this application combines seven different prediction models, technical analysis, and real-time news sentiment to provide comprehensive trading insights.
-## ⚠️Stock price prediction is inherently difficult and no model can consistently predict market movements accurately
+The Multi-Algorithm Stock Predictor is an advanced stock price prediction system that leverages multiple machine learning algorithms and technical indicators to generate ensemble predictions for stock market movements. Built with Streamlit, this application combines **6-7 different prediction models**, technical analysis, and real-time news sentiment to provide comprehensive trading insights.
+
+## ⚠️ Disclaimer
+Stock price prediction is inherently difficult and no model can consistently predict market movements accurately. This tool is for educational and informational purposes only. Always consult with a financial advisor before making investment decisions.
+
 ## ✨ Key Features
-- Ensemble predictions from different algorithms
-- Real-time stock data integration via yfinance
-- Live news sentiment analysis
-- Technical indicators visualization
-- Risk assessment and confidence scoring
-- Model consensus analysis
-- Interactive web interface
-- Customizable timeframe analysis
+- **Ensemble predictions** from 6-7 ML algorithms (SVR, Random Forest, XGBoost, KNN, Gradient Boosting, ARIMA, Prophet)
+- **Real-time stock data** integration via yfinance
+- **Live news sentiment analysis** using NLP
+- **Technical indicators** visualization (RSI, MACD, Bollinger Bands, etc.)
+- **Risk assessment** and confidence scoring
+- **Model consensus** analysis
+- **Interactive web interface** with Streamlit
+- **Customizable timeframe** analysis
+- **Production-ready** deployment on Streamlit Cloud
+
+## 🎯 Prediction Models
+
+### Available Models:
+1. **SVR** (Support Vector Regression) ✅
+2. **Random Forest** ✅
+3. **XGBoost** ✅
+4. **K-Nearest Neighbors** ✅
+5. **Gradient Boosting** ✅
+6. **ARIMA** (Time Series) ✅
+7. **Prophet** (Facebook's Forecasting) ✅
+8. **LSTM** (Optional - requires TensorFlow) ⚠️
+
+> **Note:** LSTM is disabled in Streamlit Cloud deployment due to TensorFlow compatibility issues with Python 3.13. The app works perfectly with the other 6 models.
 
 ### Moving Average Controls
 1. Use the checkboxes in the Chart Controls section to toggle 20-day and 50-day moving averages
@@ -80,9 +100,48 @@ The application will open in your default browser at `http://localhost:8501`
 - ✅ Fixed empty data array errors in forecasting
 - ✅ Improved technical indicator calculations to preserve more data
 - ✅ Made pmdarima optional (uses statsmodels ARIMA instead for Python 3.13 compatibility)
+- ✅ Made TensorFlow optional (gracefully disables LSTM if not available)
 - ✅ Enhanced error handling and validation throughout
+- ✅ **Production-ready for Streamlit Cloud deployment**
 
 See [FIXES_APPLIED.md](FIXES_APPLIED.md) for detailed information about fixes.
+
+## 🌐 Deploy to Streamlit Cloud
+
+### Quick Deploy (1-Click)
+
+1. Fork this repository
+2. Go to [share.streamlit.io](https://share.streamlit.io)
+3. Sign in with GitHub
+4. Click "New app" and select your forked repository
+5. Set main file to `stock_predictor.py`
+6. Click "Deploy!"
+
+**See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment guide.**
+
+### Production Configuration
+
+The app includes all necessary configuration files:
+- ✅ `runtime.txt` - Forces Python 3.11 (avoids 3.13 compatibility issues)
+- ✅ `requirements.txt` - Production-ready dependencies
+- ✅ `.streamlit/config.toml` - Streamlit configuration
+- ✅ `packages.txt` - System dependencies
+
+### What Works in Production
+
+| Feature | Local | Streamlit Cloud |
+|---------|-------|-----------------|
+| SVR Model | ✅ | ✅ |
+| Random Forest | ✅ | ✅ |
+| XGBoost | ✅ | ✅ |
+| KNN | ✅ | ✅ |
+| Gradient Boosting | ✅ | ✅ |
+| ARIMA | ✅ | ✅ |
+| Prophet Forecasting | ✅ | ✅ |
+| LSTM (TensorFlow) | ✅ | ❌ (Python 3.13 issue) |
+| News Sentiment | ✅ | ✅ |
+| Technical Indicators | ✅ | ✅ |
+| Real-time Data | ✅ | ✅ |
 
 ## 💡 Usage Guidelines
 
