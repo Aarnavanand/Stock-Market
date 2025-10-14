@@ -887,23 +887,33 @@ class MultiAlgorithmStockPredictor:
         return model
 
     def train_arima(self, df):
-        # Auto-optimize ARIMA parameters
-        from pmdarima import auto_arima
-        
+        """Train ARIMA model with fallback options"""
         try:
-            model = auto_arima(df['Close'], 
-                              start_p=1, start_q=1,
-                              max_p=5, max_q=5,
-                              d=1, seasonal=False,
-                              stepwise=True,
-                              suppress_warnings=True,
-                              error_action='ignore',
-                              max_order=5)
-            return model
-        except:
-            # Fallback to standard ARIMA
-            model = ARIMA(df['Close'], order=(5,1,0))
-            return model.fit()
+            # Try to use pmdarima for auto-optimization if available
+            try:
+                from pmdarima import auto_arima
+                model = auto_arima(df['Close'], 
+                                  start_p=1, start_q=1,
+                                  max_p=5, max_q=5,
+                                  d=1, seasonal=False,
+                                  stepwise=True,
+                                  suppress_warnings=True,
+                                  error_action='ignore',
+                                  max_order=5)
+                return model
+            except ImportError:
+                # pmdarima not available, use standard ARIMA
+                st.info("Using standard ARIMA (pmdarima not installed)")
+                model = ARIMA(df['Close'], order=(5,1,0))
+                return model.fit()
+        except Exception as e:
+            # Final fallback to standard ARIMA with different parameters
+            try:
+                model = ARIMA(df['Close'], order=(2,1,2))
+                return model.fit()
+            except:
+                st.warning(f"ARIMA model training failed: {str(e)}")
+                return None
 
     def predict_with_all_models(self, prediction_days=30, sequence_length=30):  # Reduced sequence length
         try:

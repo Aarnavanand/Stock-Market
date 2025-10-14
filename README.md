@@ -32,13 +32,57 @@ Note: Accuracy varies based on market conditions, volatility, and the specific s
 ## 🛠️ Setup and Installation
 
 ### Prerequisites
+- Python 3.9, 3.10, 3.11, or 3.12 (Python 3.13+ not recommended due to package compatibility)
+- Internet connection for fetching stock data
+
+### Quick Installation
+
+#### Windows - Using Setup Scripts (Recommended)
+
+**Option 1: PowerShell**
+```powershell
+.\setup.ps1
+```
+
+**Option 2: Command Prompt**
+```cmd
+setup.bat
+```
+
+#### Manual Installation
+
+1. **Install core dependencies:**
+```bash
+pip install "numpy>=1.21.2,<2.0.0" "pandas>=1.3.0" "scipy>=1.7.0"
+```
+
+2. **Install all requirements:**
 ```bash
 pip install -r requirements.txt
 ```
+
+3. **Download NLTK data:**
+```bash
+python -c "import nltk; nltk.download('vader_lexicon'); nltk.download('punkt')"
+```
+
+For detailed installation instructions and troubleshooting, see [INSTALLATION.md](INSTALLATION.md)
+
 ### Running the Application
 ```bash
 streamlit run stock_predictor.py
 ```
+
+The application will open in your default browser at `http://localhost:8501`
+
+### Recent Fixes (October 2025)
+- ✅ Fixed Chrome136 impersonation error with yfinance
+- ✅ Fixed empty data array errors in forecasting
+- ✅ Improved technical indicator calculations to preserve more data
+- ✅ Made pmdarima optional (uses statsmodels ARIMA instead for Python 3.13 compatibility)
+- ✅ Enhanced error handling and validation throughout
+
+See [FIXES_APPLIED.md](FIXES_APPLIED.md) for detailed information about fixes.
 
 ## 💡 Usage Guidelines
 
