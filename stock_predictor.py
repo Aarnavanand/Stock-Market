@@ -65,17 +65,12 @@ newsapi = NewsApiClient(api_key=NEWS_API_KEY)
 @st.cache_data(ttl=3600)
 def fetch_stock_data(symbol, days):
     try:
-        import requests
-        session = requests.Session()
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        })
-        
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
-        df = yf.download(symbol, start=start_date, end=end_date, session=session, progress=False)
+        # Don't use custom session - yfinance handles it internally with curl_cffi
+        df = yf.download(symbol, start=start_date, end=end_date, progress=False)
         
-        if df.empty:
+        if df is None or df.empty:
             st.error(f"No data retrieved for {symbol}. Please check the stock symbol.")
             return None
             
@@ -103,17 +98,11 @@ def get_news_headlines(symbol):
 def get_current_price(symbol):
     """Fetch the current live price of a stock"""
     try:
-        # Create ticker with updated session to avoid chrome impersonation errors
-        import requests
-        session = requests.Session()
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        })
-        
-        ticker = yf.Ticker(symbol, session=session)
+        # Don't use custom session - yfinance handles it internally with curl_cffi
+        ticker = yf.Ticker(symbol)
         todays_data = ticker.history(period='1d')
         
-        if todays_data.empty:
+        if todays_data is None or todays_data.empty:
             return None
             
         # If market is open, we can get the current price
@@ -121,7 +110,7 @@ def get_current_price(symbol):
             # For market hours, use current price if available
             try:
                 info = ticker.info
-                if 'regularMarketPrice' in info and info['regularMarketPrice']:
+                if info and 'regularMarketPrice' in info and info['regularMarketPrice']:
                     current_price = info['regularMarketPrice']
                     is_live = True
                 else:

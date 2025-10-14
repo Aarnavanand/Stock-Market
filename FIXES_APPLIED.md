@@ -2,28 +2,44 @@
 
 ## Issues Fixed
 
-### 1. Chrome136 Impersonation Error
-**Error:** `Impersonating chrome136 is not supported`
+### 1. yfinance Session Error (Latest Fix - October 2025)
+**Error:** `Yahoo API requires curl_cffi session not <class 'requests.sessions.Session'>. Solution: stop setting session, let YF handle.`
 
-**Root Cause:** The yfinance library was attempting to use an outdated browser impersonation method that's no longer supported.
+**Root Cause:** 
+- yfinance 0.2.28+ now uses curl_cffi internally for sessions
+- Custom requests.Session objects are no longer compatible
+- The library handles user-agent and session management automatically
 
 **Fix Applied:**
-- Added custom user-agent headers to all yfinance requests
-- Updated `fetch_stock_data()` function to use a custom session with modern Chrome user-agent
-- Updated `get_current_price()` function to use the same approach
-- Added error handling for failed ticker.info requests
+- Removed custom session creation from `fetch_stock_data()`
+- Removed custom session creation from `get_current_price()`
+- Let yfinance handle all session management internally
+- Added None checks for dataframes (`if df is None or df.empty`)
+- Removed `requests` from requirements.txt (no longer needed)
 
 **Code Changes:**
 ```python
+# OLD (Caused Error):
 import requests
 session = requests.Session()
-session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-})
+session.headers.update({'User-Agent': '...'})
 ticker = yf.Ticker(symbol, session=session)
+
+# NEW (Working):
+ticker = yf.Ticker(symbol)  # yfinance handles sessions internally
 ```
 
-### 2. Simple Forecast Fallback Error
+### 2. Chrome136 Impersonation Error (Previously Fixed)
+**Error:** `Impersonating chrome136 is not supported`
+
+**Root Cause:** The yfinance library was attempting to use an outdated browser impersonation method.
+
+**Fix Applied:**
+- Initially added custom user-agent headers (now obsolete)
+- **Updated Fix:** Let yfinance handle all session/user-agent management
+- yfinance 0.2.28+ uses curl_cffi which handles this automatically
+
+### 3. Simple Forecast Fallback Error
 **Error:** `Found array with 0 sample(s) (shape=(0, 1)) while a minimum of 1 is required by LinearRegression`
 
 **Root Cause:** The simple_forecast_fallback function was receiving empty or invalid data arrays.
@@ -36,7 +52,7 @@ ticker = yf.Ticker(symbol, session=session)
 - Validate minimum data points (at least 2) before fitting the model
 - Added informative error messages for each failure case
 
-### 3. Insufficient Valid Data After Calculating Indicators
+### 4. Insufficient Valid Data After Calculating Indicators
 **Error:** `Insufficient valid data after calculating indicators`
 
 **Root Cause:** The `calculate_technical_indicators()` function was using `dropna()` which removed too many rows, especially with indicators requiring 200-day moving averages.
@@ -63,7 +79,7 @@ df = df.dropna(how='all')
 return df
 ```
 
-### 4. pmdarima Build Error (Python 3.13 Compatibility)
+### 5. pmdarima Build Error (Python 3.13 Compatibility)
 **Error:** `ModuleNotFoundError: No module named 'numpy'` during pmdarima build
 
 **Root Cause:** 
@@ -99,18 +115,19 @@ def train_arima(self, df):
         return model.fit()
 ```
 
-### 5. Additional Improvements
+### 6. Additional Improvements
 - Updated requirements.txt to include:
-  - `requests` (for custom session handling)
-  - `yfinance>=0.2.28` (specified minimum version)
+  - Removed `requests` (no longer needed - yfinance handles sessions)
+  - `yfinance>=0.2.28` (includes curl_cffi for session management)
   - Removed `pmdarima` (incompatible with Python 3.13)
   - Added version constraints for better compatibility
   - Organized dependencies by category
 - Added better error messages throughout the code
-- Added data validation checks in multiple places
+- Added data validation checks in multiple places (None checks, empty checks)
 - Improved handling of edge cases (empty data, insufficient data, etc.)
 - Created comprehensive installation guide (INSTALLATION.md)
 - Updated setup.ps1 with Python version checking and better error handling
+- Made TensorFlow optional for Python 3.13 compatibility
 
 ## How to Apply These Fixes
 
