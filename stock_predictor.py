@@ -74,6 +74,10 @@ def fetch_stock_data(symbol, days):
         if df is None or df.empty:
             st.error(f"No data retrieved for {symbol}. Please check the stock symbol.")
             return None
+        
+        # Fix MultiIndex columns if present (yfinance sometimes returns MultiIndex)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
             
         return df
     except Exception as e:
@@ -684,10 +688,19 @@ class MultiAlgorithmStockPredictor:
             if df.empty:
                 st.warning(f"Data for the last {self.training_years} years is unavailable. Fetching maximum available data instead.")
                 df = yf.download(self.symbol, period="max")
+            
+            # Fix MultiIndex columns if present (yfinance sometimes returns MultiIndex)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            
             return df
         except Exception as e:
             st.error(f"Error fetching data: {str(e)}")
-            return yf.download(self.symbol, period="max")
+            fallback_df = yf.download(self.symbol, period="max")
+            # Fix MultiIndex for fallback too
+            if isinstance(fallback_df.columns, pd.MultiIndex):
+                fallback_df.columns = fallback_df.columns.get_level_values(0)
+            return fallback_df
 
     # Technical indicators calculation methods remain the same
     def calculate_technical_indicators(self, df):
@@ -708,12 +721,17 @@ class MultiAlgorithmStockPredictor:
             df['BB_upper'] = df['Close'] * 1.02
             df['BB_lower'] = df['Close'] * 0.98
             df['Volume_MA'] = df['Volume'].rolling(window=min(20, len(df)), min_periods=1).mean()
-            # Safe division to avoid NaN and division by zero - ensure 1D Series result
-            volume_vals = df['Volume'].values.flatten() if hasattr(df['Volume'].values, 'flatten') else df['Volume'].values
-            volume_ma_vals = df['Volume_MA'].replace(0, np.nan).values.flatten() if hasattr(df['Volume_MA'].values, 'flatten') else df['Volume_MA'].replace(0, np.nan).values
-            with np.errstate(divide='ignore', invalid='ignore'):
-                volume_rate = np.divide(volume_vals, volume_ma_vals)
-            df['Volume_Rate'] = pd.Series(volume_rate, index=df.index).fillna(1.0)
+            # Safe division to avoid NaN and division by zero - handle both Series and arrays
+            try:
+                # Try direct division first (works for simple Series)
+                df['Volume_Rate'] = (df['Volume'] / df['Volume_MA'].replace(0, np.nan)).fillna(1.0)
+            except (ValueError, KeyError):
+                # Fallback: use numpy arrays with squeeze to ensure 1D
+                volume_vals = np.squeeze(df['Volume'].values)
+                volume_ma_vals = np.squeeze(df['Volume_MA'].replace(0, np.nan).values)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    volume_rate = np.divide(volume_vals, volume_ma_vals)
+                df['Volume_Rate'] = pd.Series(volume_rate, index=df.index).fillna(1.0)
             df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
             df['EMA26'] = df['Close'].ewm(span=26, adjust=False).mean()
             df['MOM'] = df['Close'].diff(min(10, len(df)-1))
@@ -731,12 +749,17 @@ class MultiAlgorithmStockPredictor:
             df['ATR'] = self.calculate_atr(df)
             df['BB_upper'], df['BB_lower'] = self.calculate_bollinger_bands(df['Close'])
             df['Volume_MA'] = df['Volume'].rolling(window=20, min_periods=1).mean()
-            # Safe division to avoid NaN and division by zero - ensure 1D Series result
-            volume_vals = df['Volume'].values.flatten() if hasattr(df['Volume'].values, 'flatten') else df['Volume'].values
-            volume_ma_vals = df['Volume_MA'].replace(0, np.nan).values.flatten() if hasattr(df['Volume_MA'].values, 'flatten') else df['Volume_MA'].replace(0, np.nan).values
-            with np.errstate(divide='ignore', invalid='ignore'):
-                volume_rate = np.divide(volume_vals, volume_ma_vals)
-            df['Volume_Rate'] = pd.Series(volume_rate, index=df.index).fillna(1.0)
+            # Safe division to avoid NaN and division by zero - handle both Series and arrays
+            try:
+                # Try direct division first (works for simple Series)
+                df['Volume_Rate'] = (df['Volume'] / df['Volume_MA'].replace(0, np.nan)).fillna(1.0)
+            except (ValueError, KeyError):
+                # Fallback: use numpy arrays with squeeze to ensure 1D
+                volume_vals = np.squeeze(df['Volume'].values)
+                volume_ma_vals = np.squeeze(df['Volume_MA'].replace(0, np.nan).values)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    volume_rate = np.divide(volume_vals, volume_ma_vals)
+                df['Volume_Rate'] = pd.Series(volume_rate, index=df.index).fillna(1.0)
             
             # Additional technical indicators
             df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
@@ -840,7 +863,15 @@ class MultiAlgorithmStockPredictor:
         
         # Ensure all selected features exist and drop NaN values
         available_features = [col for col in enhanced_features if col in df.columns]
-        df_cleaned = df[available_features].copy()
+        
+        if not available_features or 'Close' not in available_features:
+            raise ValueError(f"Required features not available. Available columns: {df.columns.tolist()}")
+        
+        try:
+            df_cleaned = df[available_features].copy()
+        except KeyError as e:
+            raise ValueError(f"Error accessing features {e}. DataFrame columns: {df.columns.tolist()}")
+        
         df_cleaned = df_cleaned.dropna()
         
         # Scale features
