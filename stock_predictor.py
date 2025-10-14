@@ -708,7 +708,8 @@ class MultiAlgorithmStockPredictor:
             df['BB_upper'] = df['Close'] * 1.02
             df['BB_lower'] = df['Close'] * 0.98
             df['Volume_MA'] = df['Volume'].rolling(window=min(20, len(df)), min_periods=1).mean()
-            df['Volume_Rate'] = df['Volume'] / df['Volume_MA']
+            # Safe division to avoid NaN and division by zero
+            df['Volume_Rate'] = (df['Volume'] / df['Volume_MA'].replace(0, np.nan)).fillna(1.0)
             df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()
             df['EMA26'] = df['Close'].ewm(span=26, adjust=False).mean()
             df['MOM'] = df['Close'].diff(min(10, len(df)-1))
