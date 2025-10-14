@@ -11,7 +11,7 @@ from xgboost import XGBRegressor
 from sklearn.neighbors import KNeighborsRegressor
 from statsmodels.tsa.arima.model import ARIMA
 
-# Optional TensorFlow import - will work without it
+# TensorFlow import - with better error handling
 HAS_TENSORFLOW = False
 try:
     import tensorflow as tf
@@ -20,8 +20,9 @@ try:
     from tensorflow.keras.callbacks import EarlyStopping
     tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
     HAS_TENSORFLOW = True
-except ImportError:
-    st.warning("⚠️ TensorFlow not available. LSTM model will be disabled. Other models will work fine.", icon="⚠️")
+except ImportError as e:
+    # Only show warning in sidebar, not as main warning
+    pass  # Will handle in UI later
 
 from newsapi import NewsApiClient
 import yfinance as yf
@@ -375,6 +376,21 @@ def forecast_with_prophet(df, forecast_days=30):
         # Drop any NaN values
         prophet_df = prophet_df.dropna()
         
+        # Additional validation: Check for infinite values and replace with NaN, then drop
+        prophet_df = prophet_df.replace([np.inf, -np.inf], np.nan)
+        prophet_df = prophet_df.dropna()
+        
+        # Final validation: ensure we still have enough data after cleaning
+        if len(prophet_df) < 30:
+            st.warning("Insufficient data after cleaning for Prophet (< 30 points). Using simple forecast.")
+            return simple_forecast_fallback(df, forecast_days)
+        
+        # Ensure all numeric columns have no NaN or inf values before passing to Prophet
+        for col in prophet_df.select_dtypes(include=[np.number]).columns:
+            if prophet_df[col].isna().any() or np.isinf(prophet_df[col]).any():
+                st.warning(f"Data quality issue in column {col}. Using simple forecast.")
+                return simple_forecast_fallback(df, forecast_days)
+        
         # Determine appropriate seasonality based on data size
         daily_seasonality = len(prophet_df) > 90  # Only use daily seasonality with enough data
         weekly_seasonality = False  # Explicitly disable weekly seasonality for stocks
@@ -438,8 +454,21 @@ def forecast_with_prophet(df, forecast_days=30):
                                            (prophet_df['ds'].dt.day >= 15) & 
                                            (prophet_df['ds'].dt.day <= 30)).astype(int)
         
-        # Fit the model
-        model.fit(prophet_df)
+        # Final safety check: verify no NaN/inf in the dataframe before fitting
+        if prophet_df.isnull().any().any():
+            st.warning("NaN values detected in Prophet input data. Using simple forecast.")
+            return simple_forecast_fallback(df, forecast_days)
+        
+        if np.isinf(prophet_df.select_dtypes(include=[np.number]).values).any():
+            st.warning("Infinite values detected in Prophet input data. Using simple forecast.")
+            return simple_forecast_fallback(df, forecast_days)
+        
+        # Fit the model with error handling
+        try:
+            model.fit(prophet_df)
+        except Exception as fit_error:
+            st.warning(f"Prophet model fitting failed: {str(fit_error)}. Using simple forecast.")
+            return simple_forecast_fallback(df, forecast_days)
         
         # Create future dataframe for prediction using business days only
         # This is critical to avoid weekend predictions for stock markets
@@ -697,7 +726,8 @@ class MultiAlgorithmStockPredictor:
             df['ATR'] = self.calculate_atr(df)
             df['BB_upper'], df['BB_lower'] = self.calculate_bollinger_bands(df['Close'])
             df['Volume_MA'] = df['Volume'].rolling(window=20, min_periods=1).mean()
-            df['Volume_Rate'] = df['Volume'] / df['Volume_MA']
+            # Safe division to avoid NaN and division by zero
+            df['Volume_Rate'] = (df['Volume'] / df['Volume_MA'].replace(0, np.nan)).fillna(1.0)
             
             # Additional technical indicators
             df['EMA12'] = df['Close'].ewm(span=12, adjust=False).mean()

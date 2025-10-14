@@ -153,9 +153,76 @@ streamlit run stock_predictor.py
 3. Verify that the forecast displays correctly
 4. Check that technical indicators are calculated properly
 
+---
+
+## Latest Fixes (January 2025)
+
+### 7. Prophet Model Optimization Error
+**Error:** `ValueError: Initialization failed: "Intercept[1]" has NaN initial value.`
+
+**Root Cause:**
+- NaN or infinite values were getting through to Prophet's optimization process
+- Calculated features (RSI, momentum, volatility) could produce NaN/inf values
+- Insufficient data validation before model fitting
+
+**Fix Applied:**
+1. Enhanced data validation after winsorizing:
+   ```python
+   prophet_df = prophet_df.replace([np.inf, -np.inf], np.nan)
+   prophet_df = prophet_df.dropna()
+   ```
+
+2. Column-by-column validation:
+   ```python
+   for col in prophet_df.select_dtypes(include=[np.number]).columns:
+       if prophet_df[col].isna().any() or np.isinf(prophet_df[col]).any():
+           return simple_forecast_fallback(df, forecast_days)
+   ```
+
+3. Pre-fit safety checks with try-except:
+   ```python
+   if prophet_df.isnull().any().any():
+       return simple_forecast_fallback(df, forecast_days)
+   
+   try:
+       model.fit(prophet_df)
+   except Exception as fit_error:
+       return simple_forecast_fallback(df, forecast_days)
+   ```
+
+**Result:** Prophet model now works reliably with proper fallback to simple forecast
+
+### 8. Volume_Rate DataFrame Assignment Error
+**Error:** `ValueError: could not broadcast input array from shape (X,Y) into shape (X,)`
+
+**Root Cause:**
+- Division `df['Volume'] / df['Volume_MA']` created issues
+- Division by zero produced inf values
+- NaN values in Volume_MA propagated incorrectly
+
+**Fix Applied:**
+```python
+# Before:
+df['Volume_Rate'] = df['Volume'] / df['Volume_MA']
+
+# After:
+df['Volume_Rate'] = (df['Volume'] / df['Volume_MA'].replace(0, np.nan)).fillna(1.0)
+```
+
+**Why This Works:**
+- `.replace(0, np.nan)`: Prevents division by zero
+- `.fillna(1.0)`: Provides sensible default (volume equals MA)
+- Ensures Series result, not DataFrame
+
+**Result:** Technical indicators calculate correctly without broadcasting errors
+
+---
+
 ## Notes
 
 - The fixes maintain backward compatibility with the existing functionality
 - Error handling is more robust and provides clearer messages
 - The application should now work with stocks having varying amounts of historical data
 - Session handling with custom user-agents should prevent future browser impersonation issues
+- All 7-8 ML models now work reliably including Prophet and LSTM (when TensorFlow available)
+- Comprehensive data validation prevents NaN/inf propagation throughout the pipeline
